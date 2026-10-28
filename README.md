@@ -2,7 +2,7 @@
 
 A Conn3x circuit that installs fail2ban and turns on its SSH jail, so an address that keeps failing to log in gets banned for a while instead of guessing passwords all night. Any internet-facing box sees this within minutes of coming up; `journalctl -u sshd` on one is usually a wall of `Invalid user admin`.
 
-You set the ban time, the window and the number of tries once, and the same settings land on Debian, Ubuntu, Fedora and Rocky Linux. The circuit picks the parts that differ per distribution: EPEL on Rocky Linux, the right package names, and the systemd journal as the log source, since Debian 13, Fedora and Rocky Linux don't write `/var/log/auth.log` or `/var/log/secure` out of the box. You can add more jails, such as one for nginx, from the filters fail2ban ships.
+You set the ban time, the window and the number of tries once, and the same settings land on Debian, Ubuntu, Fedora and Rocky Linux. The circuit picks the parts that differ per distribution: EPEL on Rocky Linux and AlmaLinux, the right package names, and the systemd journal as the log source, since Debian 13, Fedora and Rocky Linux don't write `/var/log/auth.log` or `/var/log/secure` out of the box. You can add more jails, such as one for nginx, from the filters fail2ban ships.
 
 ## Usage
 
@@ -42,15 +42,15 @@ To try it on a throwaway container first, see [examples/local](examples/local).
 
 ### SSH on another port, or behind a port forward
 
-The sshd jail bans on the port Conn3x logs in on, `ssh_port`. When sshd listens on a different port from the one you connect to, such as behind a port forward or NAT, set `sshd_port` to the port sshd listens on.
+The sshd jail bans on the port Conn3x logs in on to each host: the host object's `port`, or `ssh_port`. When sshd listens on a different port from the one you connect to, such as behind a port forward or NAT, set `sshd_port` to the port sshd listens on. It applies to every host.
 
 ## What it does
 
 On each host, in order:
 
-1. On Rocky Linux, AlmaLinux and RHEL, installs `epel-release`, which turns on EPEL. fail2ban isn't in those distributions' own repositories. EPEL stays on afterwards.
+1. On Rocky Linux and AlmaLinux, installs `epel-release` from the distribution's extras repository, which turns on EPEL. fail2ban isn't in their own repositories. EPEL stays on afterwards. RHEL doesn't ship `epel-release`, so on RHEL turn EPEL on yourself first, or the install fails.
 2. Installs fail2ban: `fail2ban-server` on the Red Hat family, which leaves out the firewalld and sendmail add-ons the `fail2ban` package pulls in, and `fail2ban` on Debian and Ubuntu. Then `python3-systemd`, which fail2ban needs to read the journal, and `nftables`.
-3. Writes `/etc/fail2ban/jail.d/conn3x.local` with your settings, the `sshd` jail and your extra jails. It leaves `jail.conf` and the distribution's own files in `jail.d` alone; settings in a `.local` file there override them.
+3. Creates `/var/log/fail2ban.log` if it's missing, so a `recidive` jail can read it on the first start. Then writes `/etc/fail2ban/jail.d/conn3x.local` with your settings, the `sshd` jail and your extra jails. It leaves `jail.conf` and the distribution's own files in `jail.d` alone; settings in a `.local` file there override them.
 4. Starts fail2ban now and at boot, waits for its socket, and reloads it when the file changes.
 
 The file's `[DEFAULT]` section sets `backend = systemd`, so every jail reads the systemd journal unless it names a `logpath`. A jail with a `logpath` and no `backend` gets `backend = auto`, which reads that file.
@@ -78,7 +78,7 @@ Before the circuit runs, the `conn3x_host` data source reads each host's distrib
 | `ssh_private_key_file` | string | `null` | Path to a private key. When null, Conn3x uses the SSH agent. |
 | `ssh_known_hosts_file` | string | `null` | known_hosts file to check host keys against. When null, `~/.ssh/known_hosts`. Not used for a host object with `host_key`. |
 | `ssh_become` | bool | `false` | Run commands as root through sudo. Set it when `ssh_user` isn't root. |
-| `sshd_port` | number | `null` | Port sshd listens on, which the sshd jail bans on. When null, `ssh_port`. |
+| `sshd_port` | number | `null` | Port sshd listens on, which the sshd jail bans on, for every host. When null, each host's own SSH port. |
 | `bantime` | number | `3600` | Seconds an address stays banned. `-1` bans it for good. |
 | `findtime` | number | `600` | Window, in seconds, in which `maxretry` failures lead to a ban. |
 | `maxretry` | number | `5` | Failures within `findtime` that ban an address. |
@@ -95,11 +95,13 @@ Before the circuit runs, the `conn3x_host` data source reads each host's distrib
 
 ## Requirements
 
-Requires Conn3x v0.6.5 or later and systemd on each host, with a package mirror the host can reach. On Rocky Linux, AlmaLinux and RHEL, the host also needs to reach EPEL's mirrors.
+Requires Conn3x v0.6.5 or later and systemd on each host, with a package mirror the host can reach. On Rocky Linux and AlmaLinux, the host also needs to reach EPEL's mirrors; on RHEL, EPEL must already be on.
 
 ## Tested on
 
-Rocky Linux 10, Fedora 45, Ubuntu 24.04 and Debian 13. CI applies [examples/local](examples/local) to each on amd64, checks that the second plan has no changes, checks the `sshd` and `recidive` jails are running with the example's ban time, and bans an address to check it lands in nftables.
+Rocky Linux 10, Fedora 45, Ubuntu 24.04 and Debian 13. CI applies [examples/local](examples/local) to each on amd64, checks that the second plan has no changes, checks the `sshd` jail runs with the example's ban time, bans an address to check it lands in nftables, and bans it again to check `recidive` picks it up from fail2ban's log.
+
+The test hosts run with SELinux off. On Fedora and Rocky Linux, `fail2ban-server` pulls in `fail2ban-selinux` when the targeted policy is installed, but no SELinux-enforcing host has been tested.
 
 ## License
 

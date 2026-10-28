@@ -72,12 +72,23 @@ jobs:
           conn3x init
           conn3x apply -auto-approve
           conn3x plan -detailed-exitcode
-      - name: Check the jails are running with the example's ban time, and a ban lands in nftables
+      # Bans an address twice through sshd, which recidive (maxretry 2)
+      # should read from fail2ban's log and ban in turn.
+      - name: Check the jails run with the example's ban time, and bans land
         run: |
-          sudo podman exec circuit-fail2ban fail2ban-client status sshd
-          [ "$(sudo podman exec circuit-fail2ban fail2ban-client get sshd bantime)" = 7200 ]
-          sudo podman exec circuit-fail2ban fail2ban-client status | grep -q 'Jail list:.*recidive'
-          sudo podman exec circuit-fail2ban sh -c 'fail2ban-client set sshd banip 203.0.113.5 && nft list ruleset | grep -q 203.0.113.5'
+          sudo podman exec -i circuit-fail2ban sh -eu <<'EOF'
+          fail2ban-client status sshd
+          [ "$(fail2ban-client get sshd bantime)" = 7200 ]
+          fail2ban-client set sshd banip 203.0.113.5
+          nft list ruleset | grep -q 203.0.113.5
+          fail2ban-client set sshd unbanip 203.0.113.5
+          fail2ban-client set sshd banip 203.0.113.5
+          for _ in $(seq 30); do
+            fail2ban-client status recidive | grep -q 203.0.113.5 && exit 0
+            sleep 1
+          done
+          exit 1
+          EOF
       - name: Clean up
         if: always()
         working-directory: examples/local

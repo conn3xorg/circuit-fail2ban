@@ -16,7 +16,9 @@ data "conn3x_host" "facts" {
 }
 
 locals {
-  epel_hosts = { for name, h in var.hosts : name => h if contains(["rocky", "almalinux", "rhel", "centos"], data.conn3x_host.facts[name].os_id) }
+  # Rocky Linux and AlmaLinux ship epel-release in their own extras
+  # repository. RHEL doesn't, so EPEL has to be on there already.
+  epel_hosts = { for name, h in var.hosts : name => h if contains(["rocky", "almalinux"], data.conn3x_host.facts[name].os_id) }
 
   # The Red Hat family splits fail2ban into subpackages. fail2ban-server is
   # the daemon; the fail2ban package would also pull in firewalld and
@@ -29,7 +31,8 @@ locals {
   # 13, Fedora and Rocky Linux don't write /var/log/auth.log or
   # /var/log/secure out of the box, and the journal is there on every
   # systemd host.
-  jail_config = join("\n", concat(
+  # The sshd jail bans on each host's own SSH port.
+  jail_config = { for host, h in var.hosts : host => join("\n", concat(
     [
       <<-EOT
       # Written by Conn3x. Changes here are overwritten on the next apply.
@@ -46,7 +49,7 @@ locals {
       <<-EOT
       [sshd]
       enabled = true
-      port = ${coalesce(var.sshd_port, var.ssh_port)}
+      port = ${coalesce(var.sshd_port, try(h.port, var.ssh_port))}
       backend = systemd
       EOT
     ],
@@ -61,7 +64,7 @@ locals {
         j.maxretry == null ? "" : "maxretry = ${j.maxretry}",
       ]))}\n"
     ],
-  ))
+  )) }
 }
 
 circuit "epel" {
@@ -115,10 +118,20 @@ circuit "fail2ban" {
     }
   }
 
+  # The recidive jail reads fail2ban's own log. On a fresh Red Hat family
+  # host the log doesn't exist until fail2ban first starts, and fail2ban
+  # won't start with a jail whose log is missing.
+  step "log" {
+    command {
+      command = "install -m 600 /dev/null /var/log/fail2ban.log && if command -v restorecon >/dev/null; then restorecon /var/log/fail2ban.log; fi"
+      unless  = "test -e /var/log/fail2ban.log"
+    }
+  }
+
   step "config" {
     file {
       path    = local.jail_file
-      content = local.jail_config
+      content = local.jail_config[each.key]
     }
     notify = [handler.reload]
   }

@@ -19,7 +19,9 @@ module "fail2ban" {
   maxretry = 4
   ignoreip = ["10.0.0.0/8", "192.168.1.10"]
 
+  # recidive bans an address for a week when other jails keep banning it.
+  # It reads fail2ban's own log file.
   jails = {
-    recidive = { backend = "systemd" }
+    recidive = { logpath = "/var/log/fail2ban.log", maxretry = 2 }
   }
 }

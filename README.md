@@ -103,6 +103,8 @@ Rocky Linux 10, Fedora 45, Ubuntu 24.04 and Debian 13. CI applies [examples/loca
 
 The CI containers run with SELinux off. On Fedora and Rocky Linux, `fail2ban-server` pulls in `fail2ban-selinux` when the targeted policy is installed. On a Rocky Linux 10 droplet with SELinux enforcing, the same checks passed by hand: fail2ban ran confined as `fail2ban_t`, the ban landed in nftables, `recidive` picked it up, and the audit log had no denials. On Fedora 44 and AlmaLinux 10 droplets, also enforcing, the `sshd` jail came up and came back after a reboot with no denials; bans weren't retried there.
 
+SSH on another port was tried by hand on an Ubuntu 24.04 droplet with sshd on port 2222 and `port = 2222` in the host object. After a second droplet failed to log in on 2222 a few times, it was banned: its connections to 2222 were refused, while port 22, which the jail doesn't cover, still answered it.
+
 ## License
 
 MPL-2.0. See [LICENSE](LICENSE). fail2ban itself is GPL-2.0.

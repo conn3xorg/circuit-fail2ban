@@ -101,7 +101,7 @@ Requires Conn3x v0.6.5 or later and systemd on each host, with a package mirror 
 
 Rocky Linux 10, Fedora 45, Ubuntu 24.04 and Debian 13. CI applies [examples/local](examples/local) to each on amd64, checks that the second plan has no changes, checks the `sshd` jail runs with the example's ban time, bans an address to check it lands in nftables, and bans it again to check `recidive` picks it up from fail2ban's log.
 
-The CI containers run with SELinux off. On Fedora and Rocky Linux, `fail2ban-server` pulls in `fail2ban-selinux` when the targeted policy is installed. On a Rocky Linux 10 droplet with SELinux enforcing, the same checks passed by hand: fail2ban ran confined as `fail2ban_t`, the ban landed in nftables, `recidive` picked it up, and the audit log had no denials.
+The CI containers run with SELinux off. On Fedora and Rocky Linux, `fail2ban-server` pulls in `fail2ban-selinux` when the targeted policy is installed. On a Rocky Linux 10 droplet with SELinux enforcing, the same checks passed by hand: fail2ban ran confined as `fail2ban_t`, the ban landed in nftables, `recidive` picked it up, and the audit log had no denials. On Fedora 44 and AlmaLinux 10 droplets, also enforcing, the `sshd` jail came up and came back after a reboot with no denials; bans weren't retried there.
 
 ## License
 

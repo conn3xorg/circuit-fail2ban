@@ -8,7 +8,7 @@ You set the ban time, the window and the number of tries once, and the same sett
 
 ```hcl
 module "fail2ban" {
-  source = "github.com/conn3xorg/circuit-fail2ban?ref=v0.1.0"
+  source = "github.com/conn3xorg/circuit-fail2ban?ref=v0.2.0"
 
   hosts                = { web1 = "203.0.113.10", web2 = "203.0.113.11" }
   ssh_private_key_file = "~/.ssh/id_ed25519"
